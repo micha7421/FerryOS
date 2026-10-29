@@ -1,0 +1,15 @@
+[Unit]
+Description=FerryOS: install default apps from Flathub
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=1h
+StartLimitBurst=10
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/ferryos-flatpak-setup
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -5,23 +5,37 @@ set -ouex pipefail
 # Copy the contents of system_files/ of the git repo to /
 cp -avf "/ctx/system_files"/. /
 
-### Install packages
+### Branding
 
-# Packages can be installed from any enabled yum repo on the image.
-# RPMfusion repos are available by default in ublue main images
-# List of rpmfusion packages can be found here:
-# https://mirrors.rpmfusion.org/mirrorlist?path=free/fedora/updates/43/x86_64/repoview/index.html&protocol=https&redirect=1
+# Rename the OS but keep ID=fedora, so dnf, bootc and Fedora tooling keep working
+OS_RELEASE=/usr/lib/os-release
+FEDORA_VERSION="$(. "$OS_RELEASE" && echo "$VERSION_ID")"
 
-# this installs a package from fedora repos
-dnf5 install -y tmux
+set_os_release() {
+    local key="$1" value="$2"
+    if grep -q "^${key}=" "$OS_RELEASE"; then
+        sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$OS_RELEASE"
+    else
+        echo "${key}=\"${value}\"" >> "$OS_RELEASE"
+    fi
+}
 
-# Use a COPR Example:
-#
-# dnf5 -y copr enable ublue-os/staging
-# dnf5 -y install package
-# Disable COPRs so they don't end up enabled on the final image:
-# dnf5 -y copr disable ublue-os/staging
+set_os_release NAME "FerryOS"
+set_os_release PRETTY_NAME "FerryOS (based on Fedora ${FEDORA_VERSION})"
+set_os_release HOME_URL "https://github.com/micha7421/ferryos"
+set_os_release SUPPORT_URL "https://github.com/micha7421/ferryos/issues"
+set_os_release BUG_REPORT_URL "https://github.com/micha7421/ferryos/issues"
+set_os_release DEFAULT_HOSTNAME "ferryos"
 
-#### Example for enabling a System Unit File
+### Packages
 
+# Firefox comes from Flathub instead (see /usr/share/ferryos/flatpaks.list)
+if rpm -q firefox; then
+    dnf5 -y remove firefox firefox-langpacks
+fi
+
+### Services
+
+chmod +x /usr/libexec/ferryos-flatpak-setup
+systemctl enable ferryos-flatpak-setup.service
 systemctl enable podman.socket

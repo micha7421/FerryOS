@@ -1,0 +1,22 @@
+# Apps installed from Flathub on first boot (one app ID per line).
+# Changes here are applied automatically after the next image update.
+
+# Internet
+org.mozilla.firefox
+
+# Office and documents
+org.libreoffice.LibreOffice
+org.kde.okular
+
+# Media
+org.videolan.VLC
+org.kde.gwenview
+
+# Gaming and Windows programs
+com.valvesoftware.Steam
+com.usebottles.bottles
+
+# Utilities
+org.kde.kcalc
+org.kde.ark
+com.github.tchx84.Flatseal

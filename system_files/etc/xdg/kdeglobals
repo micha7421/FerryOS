@@ -1,0 +1,6 @@
+[General]
+AccentColor=14,138,138
+accentColorFromWallpaper=false
+
+[KDE]
+SingleClick=false

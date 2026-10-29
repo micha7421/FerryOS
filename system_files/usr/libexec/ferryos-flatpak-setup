@@ -1,0 +1,25 @@
+#!/usr/bin/bash
+# Installs the FerryOS default apps from Flathub.
+# Runs at boot and only does work when flatpaks.list changed since the last run.
+
+set -euo pipefail
+
+LIST=/usr/share/ferryos/flatpaks.list
+STATE_DIR=/var/lib/ferryos
+STAMP="$STATE_DIR/flatpaks.list.sha256"
+
+current="$(sha256sum "$LIST" | cut -d' ' -f1)"
+if [[ -f "$STAMP" && "$(cat "$STAMP")" == "$current" ]]; then
+    echo "Default apps already installed, nothing to do."
+    exit 0
+fi
+
+flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+# Fedora ships a filtered Flathub remote; FerryOS uses the full one
+flatpak remote-modify --system --enable --no-filter flathub
+
+mapfile -t apps < <(grep -Ev '^[[:space:]]*(#|$)' "$LIST")
+flatpak install --system --noninteractive --or-update flathub "${apps[@]}"
+
+mkdir -p "$STATE_DIR"
+echo "$current" > "$STAMP"
