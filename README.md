@@ -1,6 +1,6 @@
-# FerryOS
+<p align="center"><img src="branding/ferryos-lockup.svg" alt="FerryOS" height="96"></p>
 
-**Bring your whole PC with you.**
+<p align="center"><b>Bring your whole PC with you.</b></p>
 
 FerryOS is a Linux distribution for people moving from Windows. It doesn't just look familiar: it carries over your files, finds the programs you used on Windows and suggests their Linux equivalents, and runs `.exe` files through a compatibility layer when no Linux version exists.
 

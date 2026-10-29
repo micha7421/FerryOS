@@ -2,6 +2,7 @@
 FROM scratch AS ctx
 COPY build_files /
 COPY system_files /system_files
+COPY branding /branding
 
 # Base Image
 # FerryOS builds on Universal Blue's plain Fedora KDE (Kinoite) image
