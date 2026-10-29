@@ -26,7 +26,7 @@ sudo bootc switch ghcr.io/micha7421/ferryos:latest
 sudo systemctl reboot
 ```
 
-Later updates arrive automatically, or by running `sudo bootc upgrade`.
+Later updates arrive automatically, or by running `sudo bootc upgrade`. The full step-by-step guide is in [docs/vm-testing.md](docs/vm-testing.md).
 
 ## Repository layout
 
