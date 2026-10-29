@@ -1,52 +1,79 @@
 #!/usr/bin/env python3
-"""Generates the FerryOS logo SVGs in this folder.
+"""Generates the FerryOS logo files in this folder.
 
+The emblem is six boat hulls arranged in a ring around a sun, in one color.
 The wordmark is converted to outlines, so the SVGs don't need the font installed.
+
 Usage: python3 generate.py path/to/outfit-latin-600-normal.woff
+Needs: pip install fonttools brotli shapely
 """
 
+import math
 import sys
 from pathlib import Path
 
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontTools.ttLib import TTFont
+from shapely.geometry import Point, Polygon
+from shapely.ops import unary_union
 
 OUT = Path(__file__).parent
+FASTFETCH_LOGO = OUT.parent / "system_files/usr/share/ferryos/ferryos-fastfetch.txt"
 
 TEAL = "#0E8A8A"
+TEAL_LIGHT = "#5CC8C2"
 NAVY = "#12324A"
 SAND = "#F6EFE3"
-SUNSET = "#FF8A4C"
+
+CENTER = (256, 256)
+SUN_RADIUS = 40
+GAP = 10
+
+# "FerryOS" in figlet's standard font
+WORDMARK_ASCII = r"""
+ _____                     ___  ____
+|  ___|__ _ __ _ __ _   _ / _ \/ ___|
+| |_ / _ \ '__| '__| | | | | | \___ \
+|  _|  __/ |  | |  | |_| | |_| |___) |
+|_|  \___|_|  |_|   \__, |\___/|____/
+                    |___/
+""".strip("\n").splitlines()
 
 
-def symbol(x=0, y=0, size=512):
-    """The app icon: ferry on two waves with a rising sun, on a teal tile."""
-    s = size / 512
-    return f"""<g transform="translate({x} {y}) scale({s})">
-  <rect width="512" height="512" rx="112" fill="{TEAL}"/>
-  <g transform="translate(0 -14)">
-  <circle cx="334" cy="214" r="72" fill="{SUNSET}"/>
-  <rect x="268" y="170" width="30" height="54" rx="6" fill="#FFFFFF"/>
-  <rect x="164" y="214" width="166" height="74" rx="14" fill="#FFFFFF"/>
-  <rect x="186" y="236" width="30" height="24" rx="5" fill="{TEAL}"/>
-  <rect x="232" y="236" width="30" height="24" rx="5" fill="{TEAL}"/>
-  <rect x="278" y="236" width="30" height="24" rx="5" fill="{TEAL}"/>
-  <path d="M100 300 H412 L384 352 Q376 366 360 366 H152 Q136 366 128 352 Z" fill="#FFFFFF"/>
-  <path d="M96 396 q40 -26 80 0 t80 0 t80 0 t80 0" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round"/>
-  <path d="M136 436 q40 -26 80 0 t80 0 t80 0" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="16" stroke-linecap="round"/>
-  </g>
-</g>"""
+def hull(angle, inner=70, outer=140, length=250, slant=52, shift=50):
+    """One boat hull (trapezoid) on the ring; the narrow keel side faces outward."""
+    normal = (math.cos(angle), -math.sin(angle))
+    tangent = (-math.sin(angle), -math.cos(angle))
+
+    def point(u, v):
+        return (CENTER[0] + u * tangent[0] + v * normal[0], CENTER[1] + u * tangent[1] + v * normal[1])
+
+    return Polygon([
+        point(-length / 2 + shift, inner),
+        point(length / 2 + shift, inner),
+        point(length / 2 - slant + shift, outer),
+        point(-length / 2 + slant + shift, outer),
+    ])
 
 
-def symbolic(size=16):
-    """Single-color icon for small sizes (panels, favicons): hull and one wave."""
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 512 512">
-  <path d="M60 236 H452 L414 312 Q404 332 382 332 H130 Q108 332 98 312 Z" fill="currentColor"/>
-  <rect x="150" y="140" width="190" height="80" rx="16" fill="currentColor"/>
-  <path d="M56 410 q50 -36 100 0 t100 0 t100 0 t100 0" fill="none" stroke="currentColor" stroke-width="40" stroke-linecap="round"/>
-</svg>
-"""
+def emblem_shapes(gap=GAP):
+    """The six hulls, each cut back where the previous one lies on top, plus the sun."""
+    hulls = [hull(math.radians(90 + 60 * k)) for k in range(6)]
+    cut = [hulls[k].difference(hulls[k - 1].buffer(gap, join_style=2)) for k in range(6)]
+    return cut + [Point(CENTER).buffer(SUN_RADIUS, quad_segs=32)]
+
+
+def svg_path(shape):
+    parts = getattr(shape, "geoms", [shape])
+    return " ".join(
+        "M" + " L".join(f"{x:.1f} {y:.1f}" for x, y in list(p.exterior.coords)[:-1]) + " Z" for p in parts
+    )
+
+
+def emblem(color, x=0, y=0, size=512, extra=""):
+    paths = "".join(f'<path d="{svg_path(s)}"{extra}/>' for s in emblem_shapes())
+    return f'<g transform="translate({x} {y}) scale({size / 512})" fill="{color}">{paths}</g>'
 
 
 def text_path(font, text, x, y, size):
@@ -78,20 +105,62 @@ def svg(width, height, body):
     )
 
 
+def symbolic_svg():
+    """KDE symbolic icon: follows the color scheme's text color."""
+    style = '<style id="current-color-scheme">.ColorScheme-Text { color: #232629; }</style>'
+    return svg(512, 512, style + "\n" + emblem("currentColor", extra=' class="ColorScheme-Text"'))
+
+
+def ascii_art(cols=38, rows=19, full="#", top='"', bottom=","):
+    """Rasterizes the emblem; each character cell covers two vertically stacked samples.
+
+    Uses wider gaps than the SVG, otherwise they vanish at character resolution.
+    """
+    shape = unary_union(emblem_shapes(gap=24))
+    minx, miny, maxx, maxy = shape.bounds
+    step_x = (maxx - minx) / cols
+    step_y = (maxy - miny) / (rows * 2)
+
+    def filled(cx, cy):
+        # Majority vote of a 3x3 grid of samples inside the half-cell
+        hits = sum(
+            shape.contains(Point(minx + (cx + (i + 0.5) / 3) * step_x, miny + (cy + (j + 0.5) / 3) * step_y))
+            for i in range(3) for j in range(3)
+        )
+        return hits >= 5
+
+    lines = []
+    for r in range(rows):
+        line = ""
+        for c in range(cols):
+            upper, lower = filled(c, 2 * r), filled(c, 2 * r + 1)
+            line += full if upper and lower else top if upper else bottom if lower else " "
+        lines.append(line.rstrip())
+    return lines
+
+
+def with_wordmark(lines):
+    pad = " " * max(0, (max(map(len, lines)) - len(WORDMARK_ASCII[1])) // 2)
+    return lines + [""] + [pad + line for line in WORDMARK_ASCII]
+
+
 def main():
     font = TTFont(sys.argv[1])
 
-    (OUT / "ferryos-logo.svg").write_text(svg(512, 512, symbol()))
-    (OUT / "ferryos-logo-symbolic.svg").write_text(symbolic())
+    (OUT / "ferryos-logo.svg").write_text(svg(512, 512, emblem(TEAL)))
+    (OUT / "ferryos-logo-on-dark.svg").write_text(svg(512, 512, emblem(TEAL_LIGHT)))
+    (OUT / "ferryos-logo-symbolic.svg").write_text(symbolic_svg())
 
-    # Horizontal lockup: icon + wordmark, for light backgrounds
-    body, width = wordmark(font, 152, 98, 112, NAVY, TEAL)
-    total = int(152 + width + 16)
-    (OUT / "ferryos-lockup.svg").write_text(svg(total, 128, symbol(0, 0, 128) + "\n" + body))
+    body, width = wordmark(font, 148, 98, 112, NAVY, TEAL)
+    total = int(148 + width + 16)
+    (OUT / "ferryos-lockup.svg").write_text(svg(total, 128, emblem(TEAL, 0, 0, 128) + "\n" + body))
+    body, _ = wordmark(font, 148, 98, 112, SAND, TEAL_LIGHT)
+    (OUT / "ferryos-lockup-dark.svg").write_text(svg(total, 128, emblem(TEAL_LIGHT, 0, 0, 128) + "\n" + body))
 
-    # Same for dark backgrounds
-    body, width = wordmark(font, 152, 98, 112, SAND, "#3CC4C4")
-    (OUT / "ferryos-lockup-dark.svg").write_text(svg(total, 128, symbol(0, 0, 128) + "\n" + body))
+    (OUT / "ferryos-ascii.txt").write_text("\n".join(with_wordmark(ascii_art())) + "\n")
+    # fastfetch: block characters in color slot $1
+    blocks = ascii_art(full="█", top="▀", bottom="▄")
+    FASTFETCH_LOGO.write_text("$1" + "\n".join(with_wordmark(blocks)) + "\n")
 
 
 if __name__ == "__main__":
